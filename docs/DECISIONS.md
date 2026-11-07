@@ -10,6 +10,7 @@ Agreed design for Milaine Bot (decided 2026-11-07). Update this file when a deci
 | Commands | poise 0.7, **slash commands only** | Autocomplete only exists for slash commands |
 | Voice | songbird 0.6 (+ symphonia 0.5 codecs) | De-facto Rust voice library |
 | YouTube audio | `yt-dlp` external process | Most reliable YouTube extractor; updated often |
+| Decoding | `ffmpeg` external process | Turns any YouTube audio format into raw PCM for songbird |
 | HTTP | reqwest 0.12 (shared with songbird) | One client, neutral User-Agent |
 | Runtime | tokio | Required by the above |
 
@@ -31,6 +32,17 @@ Agreed design for Milaine Bot (decided 2026-11-07). Update this file when a deci
 - **Limits**: queue max 100, history last 50, no per-track duration limit (configurable later).
 - **Links**: single YouTube videos only in v1 (`watch`, `youtu.be`, `music.youtube.com`, `shorts`).
   `&list=` is stripped. Playlists are backlog.
+
+## Audio pipeline
+
+`yt-dlp -o - <url> | ffmpeg -i pipe:0 -f f32le -ar 48000 -ac 2 pipe:1` → songbird `RawAdapter`.
+
+- Why: letting songbird fetch the googlevideo URL that yt-dlp resolves fails with **403 Forbidden**
+  (YouTube requires yt-dlp's own download logic: tokens, chunking). yt-dlp must download the bytes.
+- ffmpeg decodes whatever container/codec YouTube serves, so we don't depend on symphonia demuxing
+  a non-seekable WebM pipe. Same approach as the owner's other app (youtube-dl-exec + ffmpeg).
+- Both processes are killed when the track ends or is skipped (`ChildContainer`).
+- Metadata lookup (`/play` resolution) still uses `yt-dlp -j`.
 
 ## Autocomplete
 

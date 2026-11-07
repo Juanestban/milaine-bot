@@ -50,8 +50,8 @@ Slash commands · search autocomplete · queue with history · auto-disconnect w
 | Tool | Why | Install |
 | --- | --- | --- |
 | [Rust](https://rustup.rs) 1.85+ | Build the bot | `rustup` |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Extract audio from YouTube | Windows: `winget install yt-dlp.yt-dlp` · macOS: `brew install yt-dlp` · Linux: `pipx install yt-dlp` or your package manager |
-| [ffmpeg](https://ffmpeg.org) | Audio transcoding | Windows: `winget install Gyan.FFmpeg` · macOS: `brew install ffmpeg` · Linux: `apt install ffmpeg` |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Finds and downloads audio from YouTube | Windows: `winget install yt-dlp.yt-dlp` · macOS: `brew install yt-dlp` · Linux: `pipx install yt-dlp` or your package manager |
+| [ffmpeg](https://ffmpeg.org) | Decodes the audio yt-dlp downloads into PCM for Discord | Windows: `winget install Gyan.FFmpeg` · macOS: `brew install ffmpeg` · Linux: `apt install ffmpeg` |
 | CMake + C compiler | Builds the bundled Opus codec | Usually already present with a Rust toolchain; Windows: Visual Studio Build Tools + `winget install Kitware.CMake` |
 
 Check both binaries are on your `PATH`:
