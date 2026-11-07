@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
 use reqwest::Url;
-use songbird::input::{ChildContainer, Input, RawAdapter, YoutubeDl};
+use serde::Deserialize;
+use songbird::input::{ChildContainer, Input, RawAdapter};
 use symphonia::core::io::ReadOnlySource;
 
 use crate::state::Error;
@@ -103,117 +105,177 @@ pub struct TrackInfo {
     pub thumbnail: Option<String>,
 }
 
-/// Resolves queries and builds playable inputs through `yt-dlp`.
+/// Direct audio stream found by yt-dlp. Expires after a few hours, so it is only used to
+/// start playback right away; queued tracks are resolved again when their turn comes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Stream {
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Resolved {
+    pub info: TrackInfo,
+    pub stream: Option<Stream>,
+}
+
+/// Resolves queries and builds playable inputs through `yt-dlp` and `ffmpeg`.
 #[derive(Clone)]
 pub struct YouTube {
-    http: reqwest::Client,
+    ytdlp: String,
     ytdlp_args: Vec<String>,
 }
 
 impl YouTube {
-    pub fn new(http: reqwest::Client, cookies: Option<&Path>) -> Self {
+    pub fn new(ytdlp: String, cookies: Option<&Path>) -> Self {
         let ytdlp_args = cookies
             .map(|path| vec!["--cookies".to_owned(), path.display().to_string()])
             .unwrap_or_default();
-        Self { http, ytdlp_args }
+        Self { ytdlp, ytdlp_args }
     }
 
-    fn ytdl(&self, query: &Query) -> YoutubeDl<'static> {
-        let ytdl = match query {
-            Query::Video(url) => YoutubeDl::new(self.http.clone(), url.clone()),
-            Query::Search(text) => YoutubeDl::new_search(self.http.clone(), text.clone()),
+    /// Finds the first matching video and its audio stream with a single yt-dlp run (~4-5 s).
+    pub async fn resolve(&self, query: &Query) -> Result<Resolved, Error> {
+        let target = match query {
+            Query::Video(url) => url.clone(),
+            Query::Search(text) => format!("ytsearch1:{text}"),
         };
-        ytdl.user_args(self.ytdlp_args.clone())
-    }
-
-    /// Looks up the first matching video. Takes a few seconds (spawns yt-dlp).
-    pub async fn resolve(&self, query: &Query) -> Result<TrackInfo, Error> {
-        let meta = self
-            .ytdl(query)
-            .search(Some(1))
-            .await?
-            .next()
-            .ok_or("yt-dlp returned no results")?;
-        let url = meta.source_url.ok_or("yt-dlp returned no video url")?;
-        Ok(TrackInfo {
-            title: meta.title.unwrap_or_else(|| url.clone()),
-            url,
-            duration: meta.duration,
-            thumbnail: meta.thumbnail,
-        })
-    }
-
-    /// Starts streaming `url` through `yt-dlp | ffmpeg` and returns raw 48 kHz stereo PCM.
-    ///
-    /// Fetching the googlevideo stream URL directly gets `403 Forbidden` (YouTube requires
-    /// yt-dlp's own download logic), so yt-dlp downloads the audio itself and pipes it to
-    /// ffmpeg, which decodes any format into the PCM Discord expects.
-    pub fn input(&self, url: &str) -> Result<Input, Error> {
-        let mut ytdlp = Command::new(YTDLP)
+        let output = tokio::process::Command::new(&self.ytdlp)
             .args(&self.ytdlp_args)
-            .args(ytdlp_args(url))
+            .args(["--dump-json", "--format", AUDIO_FORMAT, "--no-playlist"])
+            .args(["--no-warnings", &target])
+            .stdin(Stdio::null())
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|e| format!("could not start {}: {e}", self.ytdlp))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("yt-dlp failed: {}", stderr.trim()).into());
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let line = stdout.lines().find(|l| !l.trim().is_empty());
+        parse_ytdlp_json(line.ok_or("yt-dlp returned no results")?)
+    }
+
+    /// Starts decoding a track to raw 48 kHz stereo PCM.
+    ///
+    /// With a resolved `stream`, ffmpeg reads it directly using yt-dlp's headers (first audio in
+    /// under a second). Without one, `yt-dlp -o - | ffmpeg` downloads it (slower, always works).
+    /// Note: songbird's own HTTP fetch of the stream URL gets `403 Forbidden`; ffmpeg doesn't.
+    pub fn input(&self, track_url: &str, stream: Option<&Stream>) -> Result<Input, Error> {
+        let children = match stream {
+            Some(stream) => vec![spawn_ffmpeg(&direct_input_args(stream), Stdio::null())?],
+            None => self.spawn_piped(track_url)?,
+        };
+        // ChildContainer reads the last process (ffmpeg) and kills all of them on drop.
+        let pcm = ReadOnlySource::new(ChildContainer::from(children));
+        Ok(RawAdapter::new(pcm, SAMPLE_RATE, CHANNELS).into())
+    }
+
+    fn spawn_piped(&self, track_url: &str) -> Result<Vec<Child>, Error> {
+        let mut ytdlp = Command::new(&self.ytdlp)
+            .args(&self.ytdlp_args)
+            .args(["--format", AUDIO_FORMAT, "--output", "-", "--no-playlist"])
+            .args(["--quiet", "--no-warnings", track_url])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|e| format!("could not start {YTDLP}: {e}"))?;
+            .map_err(|e| format!("could not start {}: {e}", self.ytdlp))?;
         let audio = ytdlp.stdout.take().ok_or("yt-dlp has no stdout")?;
-
-        let ffmpeg = match Command::new(FFMPEG)
-            .args(FFMPEG_ARGS)
-            .stdin(Stdio::from(audio))
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-        {
-            Ok(child) => child,
+        let input = ["-i".to_owned(), "pipe:0".to_owned()];
+        match spawn_ffmpeg(&input, Stdio::from(audio)) {
+            Ok(ffmpeg) => Ok(vec![ytdlp, ffmpeg]),
             Err(e) => {
                 let _ = ytdlp.kill();
-                return Err(format!("could not start {FFMPEG}: {e}").into());
+                Err(e)
             }
-        };
-
-        // ChildContainer reads the last process (ffmpeg) and kills both on drop.
-        let pcm = ReadOnlySource::new(ChildContainer::from(vec![ytdlp, ffmpeg]));
-        Ok(RawAdapter::new(pcm, SAMPLE_RATE, CHANNELS).into())
+        }
     }
 }
 
-const YTDLP: &str = "yt-dlp";
 const FFMPEG: &str = "ffmpeg";
+const AUDIO_FORMAT: &str = "bestaudio[acodec=opus]/bestaudio/best";
 const SAMPLE_RATE: u32 = 48_000;
 const CHANNELS: u32 = 2;
 
-/// Decode stdin and write interleaved little-endian f32 PCM (what `RawAdapter` reads) to stdout.
-const FFMPEG_ARGS: [&str; 15] = [
-    "-hide_banner",
-    "-loglevel",
-    "error",
-    "-i",
-    "pipe:0",
-    "-vn",
-    "-f",
-    "f32le",
-    "-ar",
-    "48000",
-    "-ac",
-    "2",
-    "-acodec",
-    "pcm_f32le",
-    "pipe:1",
-];
+/// Runs ffmpeg on `input_args`, writing interleaved little-endian f32 PCM (what `RawAdapter`
+/// reads) to stdout.
+fn spawn_ffmpeg(input_args: &[String], stdin: Stdio) -> Result<Child, Error> {
+    Command::new(FFMPEG)
+        .args(["-hide_banner", "-loglevel", "error"])
+        .args(input_args)
+        .args([
+            "-vn",
+            "-f",
+            "f32le",
+            "-acodec",
+            "pcm_f32le",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+        ])
+        .arg("pipe:1")
+        .stdin(stdin)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("could not start {FFMPEG}: {e}").into())
+}
 
-fn ytdlp_args(url: &str) -> [&str; 8] {
-    [
-        "--format",
-        "bestaudio[acodec=opus]/bestaudio/best",
-        "--output",
-        "-",
-        "--no-playlist",
-        "--quiet",
-        "--no-warnings",
-        url,
+fn direct_input_args(stream: &Stream) -> Vec<String> {
+    let mut args: Vec<String> = [
+        "-reconnect",
+        "1",
+        "-reconnect_streamed",
+        "1",
+        "-reconnect_delay_max",
+        "5",
     ]
+    .map(String::from)
+    .into();
+    let headers: String = stream
+        .headers
+        .iter()
+        .map(|(k, v)| format!("{k}: {v}\r\n"))
+        .collect();
+    if !headers.is_empty() {
+        args.extend(["-headers".to_owned(), headers]);
+    }
+    args.extend(["-i".to_owned(), stream.url.clone()]);
+    args
+}
+
+#[derive(Deserialize)]
+struct YtDlpJson {
+    title: Option<String>,
+    webpage_url: Option<String>,
+    duration: Option<f64>,
+    thumbnail: Option<String>,
+    url: Option<String>,
+    #[serde(default)]
+    http_headers: HashMap<String, String>,
+}
+
+fn parse_ytdlp_json(line: &str) -> Result<Resolved, Error> {
+    let json: YtDlpJson = serde_json::from_str(line)?;
+    let url = json.webpage_url.ok_or("yt-dlp returned no video url")?;
+    let mut headers: Vec<_> = json.http_headers.into_iter().collect();
+    headers.sort();
+    Ok(Resolved {
+        info: TrackInfo {
+            title: json.title.unwrap_or_else(|| url.clone()),
+            duration: json
+                .duration
+                .filter(|d| d.is_finite() && *d >= 0.0)
+                .map(Duration::from_secs_f64),
+            thumbnail: json.thumbnail,
+            url,
+        },
+        stream: json.url.map(|url| Stream { url, headers }),
+    })
 }
 
 #[cfg(test)]
@@ -298,5 +360,44 @@ mod tests {
             Ok(Query::Search("daft punk one more time".into()))
         );
         assert_eq!(parse_query("   "), Err(QueryError::Empty));
+    }
+
+    #[test]
+    fn parses_ytdlp_json() {
+        let line = r#"{"title":"One More Time","webpage_url":"https://www.youtube.com/watch?v=FGBhQbmPwH8","duration":320.5,"thumbnail":"https://i.ytimg.com/x.jpg","url":"https://rr1.googlevideo.com/videoplayback?x=1","http_headers":{"User-Agent":"Mozilla/5.0","Accept":"*/*"}}"#;
+        let r = parse_ytdlp_json(line).unwrap();
+        assert_eq!(r.info.title, "One More Time");
+        assert_eq!(r.info.url, "https://www.youtube.com/watch?v=FGBhQbmPwH8");
+        assert_eq!(r.info.duration, Some(Duration::from_millis(320_500)));
+        let stream = r.stream.unwrap();
+        assert_eq!(stream.url, "https://rr1.googlevideo.com/videoplayback?x=1");
+        assert_eq!(
+            stream.headers,
+            vec![
+                ("Accept".into(), "*/*".into()),
+                ("User-Agent".into(), "Mozilla/5.0".into())
+            ]
+        );
+    }
+
+    #[test]
+    fn ytdlp_json_without_stream_or_page_url() {
+        let r =
+            parse_ytdlp_json(r#"{"webpage_url":"https://youtu.be/x","duration":null}"#).unwrap();
+        assert_eq!(r.info.title, "https://youtu.be/x");
+        assert!(r.stream.is_none());
+        assert!(parse_ytdlp_json(r#"{"title":"no url"}"#).is_err());
+    }
+
+    #[test]
+    fn direct_input_passes_headers_to_ffmpeg() {
+        let stream = Stream {
+            url: "https://example/audio".into(),
+            headers: vec![("User-Agent".into(), "Mozilla/5.0".into())],
+        };
+        let args = direct_input_args(&stream);
+        let h = args.iter().position(|a| a == "-headers").unwrap();
+        assert_eq!(args[h + 1], "User-Agent: Mozilla/5.0\r\n");
+        assert_eq!(args[args.len() - 2..], ["-i", "https://example/audio"]);
     }
 }

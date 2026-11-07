@@ -17,6 +17,8 @@ pub struct Config {
     pub alone_timeout: Duration,
     pub dev_guild_id: Option<GuildId>,
     pub ytdlp_cookies: Option<PathBuf>,
+    /// yt-dlp executable; a pip-installed launcher starts ~1 s faster than the standalone exe.
+    pub ytdlp_path: String,
 }
 
 impl Config {
@@ -53,6 +55,7 @@ impl Config {
             alone_timeout: secs("ALONE_TIMEOUT_SECS", 120)?,
             dev_guild_id,
             ytdlp_cookies: non_empty("YTDLP_COOKIES").map(PathBuf::from),
+            ytdlp_path: non_empty("YTDLP_PATH").unwrap_or_else(|| "yt-dlp".to_owned()),
         })
     }
 }

@@ -23,25 +23,14 @@ impl Lang {
 pub enum Msg<'a> {
     Pong,
     NotInVoice,
-    BusyElsewhere {
-        channel: &'a str,
-    },
+    BusyElsewhere { channel: &'a str },
     UnsupportedLink,
     EmptyQuery,
     ResolveFailed,
-    QueueFull {
-        max: usize,
-    },
-    NowPlaying {
-        title: &'a str,
-        url: &'a str,
-        duration: Option<Duration>,
-    },
-    Queued {
-        title: &'a str,
-        url: &'a str,
-        position: usize,
-    },
+    QueueFull { max: usize },
+    NowPlayingHeading,
+    AddedToQueueHeading,
+    QueueLength { len: usize },
 }
 
 impl Msg<'_> {
@@ -70,60 +59,14 @@ impl Msg<'_> {
             }
             (Msg::QueueFull { max }, En) => format!("The queue is full ({max} songs)."),
             (Msg::QueueFull { max }, Es) => format!("La cola está llena ({max} canciones)."),
-            (
-                Msg::NowPlaying {
-                    title,
-                    url,
-                    duration,
-                },
-                En,
-            ) => {
-                format!(
-                    "▶️ Now playing **[{title}](<{url}>)**{}",
-                    fmt_suffix(duration)
-                )
-            }
-            (
-                Msg::NowPlaying {
-                    title,
-                    url,
-                    duration,
-                },
-                Es,
-            ) => {
-                format!(
-                    "▶️ Reproduciendo **[{title}](<{url}>)**{}",
-                    fmt_suffix(duration)
-                )
-            }
-            (
-                Msg::Queued {
-                    title,
-                    url,
-                    position,
-                },
-                En,
-            ) => {
-                format!("➕ Added **[{title}](<{url}>)** to the queue (#{position})")
-            }
-            (
-                Msg::Queued {
-                    title,
-                    url,
-                    position,
-                },
-                Es,
-            ) => {
-                format!("➕ Agregué **[{title}](<{url}>)** a la cola (#{position})")
-            }
+            (Msg::NowPlayingHeading, En) => "Now Playing 🎶".into(),
+            (Msg::NowPlayingHeading, Es) => "Reproduciendo ahora 🎶".into(),
+            (Msg::AddedToQueueHeading, En) => "Added to Queue 🎶".into(),
+            (Msg::AddedToQueueHeading, Es) => "Agregada a la cola 🎶".into(),
+            (Msg::QueueLength { len }, En) => format!("**Queue Length:** {len}"),
+            (Msg::QueueLength { len }, Es) => format!("**Canciones en cola:** {len}"),
         }
     }
-}
-
-fn fmt_suffix(duration: Option<Duration>) -> String {
-    duration
-        .map(|d| format!(" `{}`", fmt_duration(d)))
-        .unwrap_or_default()
 }
 
 /// `m:ss`, or `h:mm:ss` for tracks longer than an hour.
@@ -134,6 +77,17 @@ pub fn fmt_duration(d: Duration) -> String {
         format!("{h}:{m:02}:{s:02}")
     } else {
         format!("{m}:{s:02}")
+    }
+}
+
+/// Zero-padded `mm:ss`, or `hh:mm:ss` for tracks longer than an hour (embed titles).
+pub fn fmt_clock(d: Duration) -> String {
+    let s = d.as_secs();
+    let (h, m, s) = (s / 3600, (s / 60) % 60, s % 60);
+    if h > 0 {
+        format!("{h:02}:{m:02}:{s:02}")
+    } else {
+        format!("{m:02}:{s:02}")
     }
 }
 
@@ -165,16 +119,9 @@ mod tests {
             Msg::EmptyQuery,
             Msg::ResolveFailed,
             Msg::QueueFull { max: 100 },
-            Msg::NowPlaying {
-                title: "t",
-                url: "u",
-                duration: None,
-            },
-            Msg::Queued {
-                title: "t",
-                url: "u",
-                position: 1,
-            },
+            Msg::NowPlayingHeading,
+            Msg::AddedToQueueHeading,
+            Msg::QueueLength { len: 1 },
         ];
         for msg in all {
             let (en, es) = (msg.render(Lang::En), msg.render(Lang::Es));
@@ -191,15 +138,9 @@ mod tests {
     }
 
     #[test]
-    fn now_playing_includes_duration() {
-        let msg = Msg::NowPlaying {
-            title: "Song",
-            url: "https://x",
-            duration: Some(Duration::from_secs(61)),
-        };
-        assert_eq!(
-            msg.render(Lang::En),
-            "▶️ Now playing **[Song](<https://x>)** `1:01`"
-        );
+    fn formats_clock() {
+        assert_eq!(fmt_clock(Duration::from_secs(233)), "03:53");
+        assert_eq!(fmt_clock(Duration::from_secs(5)), "00:05");
+        assert_eq!(fmt_clock(Duration::from_secs(3723)), "01:02:03");
     }
 }

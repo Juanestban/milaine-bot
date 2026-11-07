@@ -1,6 +1,7 @@
 mod play;
 
 use poise::CreateReply;
+use poise::serenity_prelude::CreateEmbed;
 
 use crate::i18n::Msg;
 use crate::state::{Context, Data, Error, lang};
@@ -13,6 +14,12 @@ pub fn all() -> Vec<poise::Command<Data, Error>> {
 /// Replies with `msg` in the invoking user's language.
 async fn reply(ctx: Context<'_>, msg: Msg<'_>) -> Result<(), Error> {
     ctx.say(msg.render(lang(ctx))).await?;
+    Ok(())
+}
+
+/// Replies with an embed.
+async fn reply_embed(ctx: Context<'_>, embed: CreateEmbed) -> Result<(), Error> {
+    ctx.send(CreateReply::default().embed(embed)).await?;
     Ok(())
 }
 

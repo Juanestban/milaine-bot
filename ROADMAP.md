@@ -34,8 +34,6 @@ Legend: ✅ done · 🚧 in progress · ⬜ todo
 - [x] Bilingual replies for every `/play` outcome (`i18n::Msg`)
 - [x] Manual test: plays audio in a real voice channel
 
-> Note: queued songs only start playing once auto-advance lands in M3.
-
 ## M2 — Autocomplete ✅
 
 - [x] `/play` query autocomplete from YouTube suggestions (no API key)
@@ -51,7 +49,10 @@ Legend: ✅ done · 🚧 in progress · ⬜ todo
 ## M3 — Queue & navigation ⬜
 
 - [ ] Queue model: current, upcoming (max 100), history (last 50) — pure logic with unit tests
-- [ ] Auto-advance to next track when one ends (songbird track end event)
+- [x] Auto-advance to next track when one ends or fails (songbird End/Error events, stale handles ignored)
+- [x] Queued tracks are re-resolved when their turn comes (stream URLs expire)
+- [x] Announce "Now Playing" in the text channel when auto-advancing
+- [x] After the queue ends, the next `/play` starts immediately (was stuck as "queued")
 - [ ] `/next` — skip to next track
 - [ ] `/prev` — go back to the previous track (current is pushed back to the front of the queue)
 - [ ] `/replay` — restart the current track from 0:00
@@ -78,8 +79,8 @@ Legend: ✅ done · 🚧 in progress · ⬜ todo
 
 - [ ] All user-facing messages available in English and Spanish (catalog in `i18n.rs`, tests that every key has both)
 - [ ] Command names/descriptions/options localized for `es-ES` and `es-419`
-- [ ] "Now playing" embed: title (link), thumbnail, duration, requested by
-- [ ] "Added to queue" embed with position and ETA
+- [x] "Now Playing" / "Added to Queue" embeds: requester avatar, `Title · [mm:ss]` linking to the video, queue length
+- [ ] ETA until a queued track plays
 - [ ] Friendly error embeds (not in voice, nothing playing, video unavailable, age-restricted…)
 
 ## M7 — Hardening ⬜

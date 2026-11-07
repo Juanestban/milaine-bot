@@ -1,15 +1,19 @@
 use poise::serenity_prelude::{
     AutocompleteChoice, ChannelId, CreateAutocompleteResponse, GuildId, Mentionable, UserId,
 };
-use songbird::events::{Event, TrackEvent};
-use tracing::{info, warn};
+use std::sync::Arc;
+use std::time::Instant;
 
-use super::{reply, reply_private};
-use crate::events::LogTrackError;
+use songbird::{Call, Songbird};
+use tokio::sync::Mutex;
+use tracing::{debug, info, warn};
+
+use super::{reply, reply_embed, reply_private};
 use crate::i18n::Msg;
 use crate::player::{Enqueued, GuildPlayer, MAX_QUEUE, Track};
-use crate::state::{Context, Error};
-use crate::youtube::{self, QueryError};
+use crate::state::{Context, Error, lang};
+use crate::ui::{self, TrackHeading};
+use crate::youtube::{self, QueryError, Resolved};
 
 /// Play a song from YouTube, or add it to the queue.
 #[poise::command(
@@ -56,87 +60,89 @@ pub async fn play(
         Some(_) => {}
         // Not connected: drop any stale state left by a previous session.
         None => {
-            ctx.data().players.lock().await.remove(&guild_id);
+            ctx.data().playback.players.lock().await.remove(&guild_id);
         }
     }
 
     // Resolving spawns yt-dlp and can take longer than Discord's 3 s reply window.
     ctx.defer().await?;
 
-    let info = match ctx.data().youtube.resolve(&query).await {
-        Ok(info) => info,
+    // Join the voice channel while yt-dlp resolves, so both waits overlap.
+    let started = Instant::now();
+    let (resolved, call) = tokio::join!(
+        ctx.data().playback.youtube.resolve(&query),
+        join_voice(&manager, guild_id, user_channel)
+    );
+    let call = call?;
+    let Resolved { info, stream } = match resolved {
+        Ok(resolved) => resolved,
         Err(error) => {
             warn!(?query, %error, "could not resolve track");
             return reply(ctx, Msg::ResolveFailed).await;
         }
     };
-
-    let call = manager.join(guild_id, user_channel).await?;
-    if let Err(error) = call.lock().await.deafen(true).await {
-        warn!(%error, "could not self-deafen");
-    }
+    debug!(
+        elapsed_ms = started.elapsed().as_millis(),
+        direct = stream.is_some(),
+        "resolved"
+    );
 
     let track = Track {
         info,
         requested_by: ctx.author().id,
+        requester_avatar: ctx.author().face(),
+        lang: lang(ctx),
     };
 
-    let mut players = ctx.data().players.lock().await;
+    let playback = &ctx.data().playback;
+    let mut players = playback.players.lock().await;
     let player = players
         .entry(guild_id)
-        .or_insert_with(|| GuildPlayer::new(user_channel));
+        .or_insert_with(|| GuildPlayer::new(user_channel, ctx.channel_id()));
     player.channel_id = user_channel;
+    player.text_channel = ctx.channel_id();
 
-    let (title, url, duration) = (
-        track.info.title.clone(),
-        track.info.url.clone(),
-        track.info.duration,
-    );
-
-    match player.enqueue(track) {
+    match player.enqueue(track.clone()) {
         Ok(Enqueued::PlayNow) => {
-            let input = match ctx.data().youtube.input(&url) {
-                Ok(input) => input,
+            match playback
+                .start(guild_id, &call, &track, stream.as_ref())
+                .await
+            {
+                Ok(handle) => player.handle = Some(handle),
                 Err(error) => {
                     warn!(%error, "could not start stream");
                     player.current = None;
                     return reply(ctx, Msg::ResolveFailed).await;
                 }
-            };
-            let handle = call.lock().await.play_only_input(input);
-            handle.add_event(
-                Event::Track(TrackEvent::Error),
-                LogTrackError {
-                    guild_id,
-                    title: title.clone(),
-                },
-            )?;
-            player.handle = Some(handle);
-            info!(%guild_id, %title, "now playing");
-            reply(
-                ctx,
-                Msg::NowPlaying {
-                    title: &title,
-                    url: &url,
-                    duration,
-                },
-            )
-            .await
+            }
+            let embed = ui::track_embed(TrackHeading::NowPlaying, &track, player.upcoming.len());
+            drop(players);
+            reply_embed(ctx, embed).await
         }
         Ok(Enqueued::Queued(position)) => {
-            info!(%guild_id, %title, position, "queued");
-            reply(
-                ctx,
-                Msg::Queued {
-                    title: &title,
-                    url: &url,
-                    position,
-                },
-            )
-            .await
+            info!(%guild_id, title = %track.info.title, position, "queued");
+            let embed = ui::track_embed(TrackHeading::AddedToQueue, &track, player.upcoming.len());
+            drop(players);
+            reply_embed(ctx, embed).await
         }
-        Err(_) => reply(ctx, Msg::QueueFull { max: MAX_QUEUE }).await,
+        Err(_) => {
+            drop(players);
+            reply(ctx, Msg::QueueFull { max: MAX_QUEUE }).await
+        }
     }
+}
+
+/// Joins (or stays in) `channel`, self-deafened since the bot never listens.
+async fn join_voice(
+    manager: &Songbird,
+    guild_id: GuildId,
+    channel: ChannelId,
+) -> Result<Arc<Mutex<Call>>, Error> {
+    let call = manager.join(guild_id, channel).await?;
+    if let Err(error) = call.lock().await.deafen(true).await {
+        warn!(%error, "could not self-deafen");
+    }
+    Ok(call)
 }
 
 /// Live YouTube results while the user types the `/play` query.

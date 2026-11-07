@@ -102,6 +102,7 @@ DEV_GUILD_ID=your-test-server-id   # optional, makes commands appear instantly
 | `YOUTUBE_API_KEY` | | — | Use YouTube Data API v3 for autocomplete instead of the public suggestion endpoint |
 | `IDLE_TIMEOUT_SECS` | | `600` | Leave the channel after this many seconds with nothing playing |
 | `ALONE_TIMEOUT_SECS` | | `120` | Leave the channel after this many seconds alone |
+| `YTDLP_PATH` | | `yt-dlp` | yt-dlp executable. A pip install (`pip install -U yt-dlp`) starts ~1 s faster per song than the standalone binary |
 | `YTDLP_COOKIES` | | — | Path to a cookies file for yt-dlp (needed on some servers) |
 | `RUST_LOG` | | `info,milaine_bot=debug` | Log level |
 

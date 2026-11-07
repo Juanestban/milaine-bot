@@ -1,11 +1,12 @@
 mod commands;
 mod config;
-mod events;
 mod http;
 mod i18n;
+mod playback;
 mod player;
 mod search;
 mod state;
+mod ui;
 mod youtube;
 
 use poise::serenity_prelude as serenity;
@@ -66,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
                         info!("registered commands globally");
                     }
                 }
-                Data::new(config)
+                Data::new(config, ctx.http.clone())
             })
         })
         .build();

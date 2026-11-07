@@ -35,14 +35,19 @@ Agreed design for Milaine Bot (decided 2026-11-07). Update this file when a deci
 
 ## Audio pipeline
 
-`yt-dlp -o - <url> | ffmpeg -i pipe:0 -f f32le -ar 48000 -ac 2 pipe:1` → songbird `RawAdapter`.
+1. **One** `yt-dlp --dump-json` run resolves the query: metadata + direct stream URL + its HTTP headers.
+2. `ffmpeg -headers <yt-dlp headers> -i <stream url> -f f32le -ar 48000 -ac 2 pipe:1` → songbird `RawAdapter`.
+3. Fallback when no direct URL: `yt-dlp -o - <url> | ffmpeg -i pipe:0 ...`.
 
-- Why: letting songbird fetch the googlevideo URL that yt-dlp resolves fails with **403 Forbidden**
-  (YouTube requires yt-dlp's own download logic: tokens, chunking). yt-dlp must download the bytes.
-- ffmpeg decodes whatever container/codec YouTube serves, so we don't depend on symphonia demuxing
-  a non-seekable WebM pipe. Same approach as the owner's other app (youtube-dl-exec + ffmpeg).
-- Both processes are killed when the track ends or is skipped (`ChildContainer`).
-- Metadata lookup (`/play` resolution) still uses `yt-dlp -j`.
+- Why not songbird's HTTP fetch: it gets **403 Forbidden** from googlevideo. ffmpeg with yt-dlp's
+  headers works and starts audio in < 1 s (measured), at full download speed.
+- Latency (measured 2026-11-07): before ~13.5 s to first audio (yt-dlp ran twice, exe startup 1.5 s
+  each); after ~5 s (single resolve ~4.5 s, voice join runs concurrently, ffmpeg first audio ~0.9 s).
+- `YTDLP_PATH` can point to a pip-installed yt-dlp (0.4 s startup vs 1.5 s for the standalone exe).
+- Rejected: `player_client=android_vr` (faster resolve) — needs a GVS PO token, downloads get 403.
+- ffmpeg decodes whatever container/codec YouTube serves (same approach as the owner's other app,
+  youtube-dl-exec + ffmpeg). Processes are killed when the track ends or is skipped (`ChildContainer`).
+- Stream URLs expire, so queued tracks are re-resolved when their turn comes.
 
 ## Autocomplete
 
