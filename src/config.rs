@@ -6,9 +6,9 @@ use poise::serenity_prelude::GuildId;
 
 /// Runtime configuration, loaded from environment variables (and `.env` in local dev).
 #[derive(Debug, Clone)]
-#[expect(
-    dead_code,
-    reason = "optional settings are consumed by upcoming milestones (M1-M5)"
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "timeouts and API key are consumed by M2 and M5")
 )]
 pub struct Config {
     pub discord_token: String,

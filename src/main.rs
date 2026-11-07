@@ -2,7 +2,9 @@ mod commands;
 mod config;
 mod http;
 mod i18n;
+mod player;
 mod state;
+mod youtube;
 
 use poise::serenity_prelude as serenity;
 use songbird::SerenityInit;

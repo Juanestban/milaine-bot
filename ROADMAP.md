@@ -17,19 +17,22 @@ Legend: ✅ done · 🚧 in progress · ⬜ todo
 - [x] Locale → language detection (`es-*` → Spanish, else English)
 - [x] Logo (PNG + SVG), README, CLAUDE.md, DECISIONS.md, `.env.example`, MIT license
 
-## M1 — Play from YouTube ⬜
+## M1 — Play from YouTube 🚧
 
-- [ ] Per-guild player state (`GuildPlayer`) stored in `Data`, safe across concurrent guilds
-- [ ] YouTube URL parsing: `youtube.com/watch?v=`, `youtu.be/`, `music.youtube.com`, `/shorts/`; strip `&list=` (unit tests)
-- [ ] Resolve a query or URL to track metadata (title, url, duration, thumbnail) via yt-dlp
-- [ ] `/play <query|url>`:
-  - [ ] Caller must be in a voice channel → otherwise friendly error
-  - [ ] Bot joins the caller's voice channel
-  - [ ] Bot already in another channel of the guild → reject with the channel name
-  - [ ] Nothing playing → start immediately; otherwise enqueue and reply with position
-- [ ] Defer the interaction reply (resolution can exceed 3 s)
-- [ ] Pass `YTDLP_COOKIES` to yt-dlp when set
+- [x] Per-guild player state (`GuildPlayer`) stored in `Data`, safe across concurrent guilds
+- [x] YouTube URL parsing: `youtube.com/watch?v=`, `youtu.be/`, `music.youtube.com`, `/shorts/`, `/live/`; strip `&list=` (unit tests)
+- [x] Resolve a query or URL to track metadata (title, url, duration, thumbnail) via yt-dlp
+- [x] `/play <query|url>`:
+  - [x] Caller must be in a voice channel → otherwise friendly error
+  - [x] Bot joins the caller's voice channel (self-deafened)
+  - [x] Bot already in another channel of the guild → reject with the channel name
+  - [x] Nothing playing → start immediately; otherwise enqueue and reply with position
+- [x] Defer the interaction reply (resolution takes ~5–8 s)
+- [x] Pass `YTDLP_COOKIES` to yt-dlp when set
+- [x] Bilingual replies for every `/play` outcome (`i18n::Msg`)
 - [ ] Manual test: plays audio in a real voice channel
+
+> Note: queued songs only start playing once auto-advance lands in M3.
 
 ## M2 — Autocomplete ⬜
 
