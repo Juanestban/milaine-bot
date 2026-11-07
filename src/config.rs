@@ -6,10 +6,6 @@ use poise::serenity_prelude::GuildId;
 
 /// Runtime configuration, loaded from environment variables (and `.env` in local dev).
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "idle timeouts are consumed by M5")
-)]
 pub struct Config {
     pub discord_token: String,
     pub youtube_api_key: Option<String>,

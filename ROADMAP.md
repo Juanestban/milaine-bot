@@ -67,17 +67,19 @@ Legend: ✅ done · 🚧 in progress · ⬜ todo
 - [x] `/resume` — explicit resume
 - [x] `/stop` — stop playback and clear the queue, stay in channel (history kept)
 - [x] `/disconnect` — leave the channel and clear all state
-- [ ] Idle timer after `/stop` (see M5)
+- [x] Idle timer after `/stop` (see M5)
 - [ ] Manual test of every command
 
-## M5 — Idle & auto-disconnect ⬜
+## M5 — Idle & auto-disconnect 🚧
 
-- [ ] Empty queue → idle state
-- [ ] Leave after `IDLE_TIMEOUT_SECS` (default 10 min) idle; timer cancelled when a new song is played
-- [ ] Paused does **not** count as idle
-- [ ] Alone in the channel (no humans) → leave after `ALONE_TIMEOUT_SECS` (default 2 min)
-- [ ] Clean state when kicked / moved by a moderator
-- [ ] Unit tests with paused tokio time
+- [x] Empty queue → idle state
+- [x] Leave after `IDLE_TIMEOUT_SECS` (default 10 min) idle; timer resets when a new song plays
+- [x] Paused does **not** count as idle
+- [x] Alone in the channel (no humans) → leave after `ALONE_TIMEOUT_SECS` (default 2 min)
+- [x] Announce why the bot left, in the language of whoever used `/play` last
+- [x] Clean state when kicked; follow the bot when a moderator moves it
+- [x] Unit tests for the idle/alone clock (deterministic instants)
+- [ ] Manual test: idle and alone timeouts in a real channel
 
 ## M6 — Bilingual UX & embeds ⬜
 

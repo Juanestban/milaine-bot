@@ -58,6 +58,10 @@ pub enum Msg<'a> {
         count: usize,
         total: &'a str,
     },
+    LeftIdle {
+        minutes: u64,
+    },
+    LeftAlone,
 }
 
 impl Msg<'_> {
@@ -144,6 +148,16 @@ impl Msg<'_> {
             ) => {
                 format!("Página {page}/{pages} · {count} canciones · {total} en total")
             }
+            (Msg::LeftIdle { minutes }, En) => {
+                format!("💤 No music for {minutes} minutes, so I left the voice channel.")
+            }
+            (Msg::LeftIdle { minutes }, Es) => {
+                format!("💤 Sin música por {minutes} minutos, así que salí del canal de voz.")
+            }
+            (Msg::LeftAlone, En) => "👋 Everyone left, so I left the voice channel too.".into(),
+            (Msg::LeftAlone, Es) => {
+                "👋 Todos se fueron, así que yo también salí del canal de voz.".into()
+            }
         }
     }
 }
@@ -220,6 +234,8 @@ mod tests {
                 count: 12,
                 total: "45:12",
             },
+            Msg::LeftIdle { minutes: 10 },
+            Msg::LeftAlone,
         ];
         for msg in all {
             let (en, es) = (msg.render(Lang::En), msg.render(Lang::Es));

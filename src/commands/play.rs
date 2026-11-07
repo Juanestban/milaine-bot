@@ -102,6 +102,7 @@ pub async fn play(
             .or_insert_with(|| GuildPlayer::new(user_channel, ctx.channel_id()));
         player.channel_id = user_channel;
         player.text_channel = ctx.channel_id();
+        player.lang = lang(ctx);
         player
             .enqueue(track.clone())
             .map(|e| (e, player.upcoming.len()))

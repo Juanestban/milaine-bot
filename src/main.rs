@@ -2,6 +2,7 @@ mod commands;
 mod config;
 mod http;
 mod i18n;
+mod idle;
 mod playback;
 mod player;
 mod search;
@@ -42,6 +43,10 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::from_env()?;
     let token = config.discord_token.clone();
+    let timeouts = idle::Timeouts {
+        idle: config.idle_timeout,
+        alone: config.alone_timeout,
+    };
     let dev_guild = config.dev_guild_id;
 
     let framework = poise::Framework::builder()
@@ -67,7 +72,12 @@ async fn main() -> anyhow::Result<()> {
                         info!("registered commands globally");
                     }
                 }
-                Data::new(config, ctx.http.clone())
+                let data = Data::new(config, ctx.http.clone())?;
+                let songbird = songbird::get(ctx)
+                    .await
+                    .ok_or("songbird is not registered")?;
+                idle::spawn(ctx.clone(), songbird, data.playback.clone(), timeouts);
+                Ok(data)
             })
         })
         .build();

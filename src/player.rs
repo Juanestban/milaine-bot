@@ -6,6 +6,7 @@ use poise::serenity_prelude::{ChannelId, GuildId, UserId};
 use songbird::tracks::TrackHandle;
 
 use crate::i18n::Lang;
+use crate::idle::IdleClock;
 use crate::youtube::{Stream, TrackInfo};
 
 pub const MAX_QUEUE: usize = 100;
@@ -55,6 +56,9 @@ pub struct GuildPlayer {
     /// Previously played tracks, most recent last.
     pub history: VecDeque<Track>,
     pub paused: bool,
+    /// Language of whoever used `/play` last, for announcements to the whole channel.
+    pub lang: Lang,
+    pub idle: IdleClock,
     current_stream: Option<CachedStream>,
     prefetched: Option<CachedStream>,
 }
@@ -69,6 +73,8 @@ impl GuildPlayer {
             upcoming: VecDeque::new(),
             history: VecDeque::new(),
             paused: false,
+            lang: Lang::En,
+            idle: IdleClock::default(),
             current_stream: None,
             prefetched: None,
         }
