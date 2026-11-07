@@ -45,5 +45,5 @@ Rust 2024 · serenity 0.12 · poise 0.7 (slash commands) · songbird 0.6 (voice)
 cargo run                 # run the bot locally (needs .env)
 cargo test                # unit tests
 cargo clippy --all-targets -- -D warnings
-resvg -w 512 -h 512 assets/logo.svg assets/logo.png   # re-export logo
+# logo: assets/logo.png is the source; assets/logo.svg embeds it (regenerate command in README)
 ```

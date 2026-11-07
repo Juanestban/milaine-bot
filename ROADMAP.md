@@ -15,7 +15,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ todo
 - [x] Slash command registration (dev guild = instant, otherwise global)
 - [x] `/ping` health check
 - [x] Locale → language detection (`es-*` → Spanish, else English)
-- [x] Logo (SVG + 512px PNG), README, CLAUDE.md, DECISIONS.md, `.env.example`, MIT license
+- [x] Logo (PNG + SVG), README, CLAUDE.md, DECISIONS.md, `.env.example`, MIT license
 
 ## M1 — Play from YouTube ⬜
 

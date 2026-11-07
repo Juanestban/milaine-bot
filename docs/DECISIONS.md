@@ -58,5 +58,6 @@ Agreed design for Milaine Bot (decided 2026-11-07). Update this file when a deci
 
 - Local first. Docker / systemd / cookies for datacenter IPs come last (M8).
 - Each feature: unit tests for pure logic, clippy clean, ROADMAP ticked, one commit, graphify refreshed.
-- MIT license. Logo is an original character inspired by elegant anime royalty
-  (not a reproduction of any existing character).
+- MIT license. Logo: owner-provided artwork in `assets/logo.png` (source of truth);
+  `assets/logo.svg` embeds the same PNG as base64 (the painted style does not vectorize well).
+  Replaced the first hand-drawn SVG logo on 2026-11-07.

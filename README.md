@@ -142,23 +142,27 @@ src/
 ├── i18n.rs        # English / Spanish replies
 ├── state.rs       # shared bot state (Data)
 └── commands/      # slash commands
-assets/            # logo (SVG source + PNG)
+assets/            # logo (PNG source + SVG wrapper)
 docs/DECISIONS.md  # design decisions
 ROADMAP.md         # requirements and progress
 ```
 
-The logo is drawn in `assets/logo.svg`. Re-export it with [resvg](https://github.com/linebender/resvg):
+The logo source is `assets/logo.png` (256×256). `assets/logo.svg` embeds that same PNG so it can be used
+wherever an SVG is required. After replacing the PNG, regenerate the SVG:
 
 ```sh
-cargo install resvg
-resvg -w 512 -h 512 assets/logo.svg assets/logo.png
+printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Milaine Bot</title>
+  <image width="256" height="256" href="data:image/png;base64,%s"/>
+</svg>
+' "$(base64 -w0 assets/logo.png)" > assets/logo.svg
 ```
 
 ## Disclaimer
 
 This project is for personal and educational use. Streaming content from YouTube may be subject to
 [YouTube's Terms of Service](https://www.youtube.com/t/terms); you are responsible for how you use it.
-The logo is an original character and is not affiliated with any existing franchise.
+The logo artwork belongs to the project owner and is not affiliated with any existing franchise.
 
 ## License
 
