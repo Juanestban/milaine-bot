@@ -17,7 +17,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ todo
 - [x] Locale → language detection (`es-*` → Spanish, else English)
 - [x] Logo (PNG + SVG), README, CLAUDE.md, DECISIONS.md, `.env.example`, MIT license
 
-## M1 — Play from YouTube 🚧
+## M1 — Play from YouTube ✅
 
 - [x] Per-guild player state (`GuildPlayer`) stored in `Data`, safe across concurrent guilds
 - [x] YouTube URL parsing: `youtube.com/watch?v=`, `youtu.be/`, `music.youtube.com`, `/shorts/`, `/live/`; strip `&list=` (unit tests)
@@ -29,8 +29,10 @@ Legend: ✅ done · 🚧 in progress · ⬜ todo
   - [x] Nothing playing → start immediately; otherwise enqueue and reply with position
 - [x] Defer the interaction reply (resolution takes ~5–8 s)
 - [x] Pass `YTDLP_COOKIES` to yt-dlp when set
+- [x] Stream through `yt-dlp | ffmpeg` → raw 48 kHz PCM (direct googlevideo fetch returns 403)
+- [x] Log track playback errors (`track failed`)
 - [x] Bilingual replies for every `/play` outcome (`i18n::Msg`)
-- [ ] Manual test: plays audio in a real voice channel
+- [x] Manual test: plays audio in a real voice channel
 
 > Note: queued songs only start playing once auto-advance lands in M3.
 

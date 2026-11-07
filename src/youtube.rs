@@ -1,8 +1,10 @@
 use std::path::Path;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use reqwest::Url;
-use songbird::input::{Input, YoutubeDl};
+use songbird::input::{ChildContainer, Input, RawAdapter, YoutubeDl};
+use symphonia::core::io::ReadOnlySource;
 
 use crate::state::Error;
 
@@ -141,11 +143,77 @@ impl YouTube {
         })
     }
 
-    /// A lazy audio input; the stream URL is fetched when playback starts so it never expires
-    /// while waiting in the queue.
-    pub fn input(&self, url: &str) -> Input {
-        self.ytdl(&Query::Video(url.to_owned())).into()
+    /// Starts streaming `url` through `yt-dlp | ffmpeg` and returns raw 48 kHz stereo PCM.
+    ///
+    /// Fetching the googlevideo stream URL directly gets `403 Forbidden` (YouTube requires
+    /// yt-dlp's own download logic), so yt-dlp downloads the audio itself and pipes it to
+    /// ffmpeg, which decodes any format into the PCM Discord expects.
+    pub fn input(&self, url: &str) -> Result<Input, Error> {
+        let mut ytdlp = Command::new(YTDLP)
+            .args(&self.ytdlp_args)
+            .args(ytdlp_args(url))
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("could not start {YTDLP}: {e}"))?;
+        let audio = ytdlp.stdout.take().ok_or("yt-dlp has no stdout")?;
+
+        let ffmpeg = match Command::new(FFMPEG)
+            .args(FFMPEG_ARGS)
+            .stdin(Stdio::from(audio))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(e) => {
+                let _ = ytdlp.kill();
+                return Err(format!("could not start {FFMPEG}: {e}").into());
+            }
+        };
+
+        // ChildContainer reads the last process (ffmpeg) and kills both on drop.
+        let pcm = ReadOnlySource::new(ChildContainer::from(vec![ytdlp, ffmpeg]));
+        Ok(RawAdapter::new(pcm, SAMPLE_RATE, CHANNELS).into())
     }
+}
+
+const YTDLP: &str = "yt-dlp";
+const FFMPEG: &str = "ffmpeg";
+const SAMPLE_RATE: u32 = 48_000;
+const CHANNELS: u32 = 2;
+
+/// Decode stdin and write interleaved little-endian f32 PCM (what `RawAdapter` reads) to stdout.
+const FFMPEG_ARGS: [&str; 15] = [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-i",
+    "pipe:0",
+    "-vn",
+    "-f",
+    "f32le",
+    "-ar",
+    "48000",
+    "-ac",
+    "2",
+    "-acodec",
+    "pcm_f32le",
+    "pipe:1",
+];
+
+fn ytdlp_args(url: &str) -> [&str; 8] {
+    [
+        "--format",
+        "bestaudio[acodec=opus]/bestaudio/best",
+        "--output",
+        "-",
+        "--no-playlist",
+        "--quiet",
+        "--no-warnings",
+        url,
+    ]
 }
 
 #[cfg(test)]

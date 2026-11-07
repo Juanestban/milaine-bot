@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod events;
 mod http;
 mod i18n;
 mod player;

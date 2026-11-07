@@ -1,7 +1,9 @@
 use poise::serenity_prelude::{ChannelId, GuildId, Mentionable, UserId};
+use songbird::events::{Event, TrackEvent};
 use tracing::{info, warn};
 
 use super::{reply, reply_private};
+use crate::events::LogTrackError;
 use crate::i18n::Msg;
 use crate::player::{Enqueued, GuildPlayer, MAX_QUEUE, Track};
 use crate::state::{Context, Error};
@@ -90,8 +92,23 @@ pub async fn play(
 
     match player.enqueue(track) {
         Ok(Enqueued::PlayNow) => {
-            let input = ctx.data().youtube.input(&url);
-            player.handle = Some(call.lock().await.play_only_input(input));
+            let input = match ctx.data().youtube.input(&url) {
+                Ok(input) => input,
+                Err(error) => {
+                    warn!(%error, "could not start stream");
+                    player.current = None;
+                    return reply(ctx, Msg::ResolveFailed).await;
+                }
+            };
+            let handle = call.lock().await.play_only_input(input);
+            handle.add_event(
+                Event::Track(TrackEvent::Error),
+                LogTrackError {
+                    guild_id,
+                    title: title.clone(),
+                },
+            )?;
+            player.handle = Some(handle);
             info!(%guild_id, %title, "now playing");
             reply(
                 ctx,
