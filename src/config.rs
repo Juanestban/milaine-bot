@@ -8,7 +8,7 @@ use poise::serenity_prelude::GuildId;
 #[derive(Debug, Clone)]
 #[cfg_attr(
     not(test),
-    expect(dead_code, reason = "timeouts and API key are consumed by M2 and M5")
+    expect(dead_code, reason = "idle timeouts are consumed by M5")
 )]
 pub struct Config {
     pub discord_token: String,

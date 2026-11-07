@@ -36,13 +36,17 @@ Legend: ✅ done · 🚧 in progress · ⬜ todo
 
 > Note: queued songs only start playing once auto-advance lands in M3.
 
-## M2 — Autocomplete ⬜
+## M2 — Autocomplete ✅
 
-- [ ] `/play` query autocomplete from YouTube suggestions (no API key)
-- [ ] Optional YouTube Data API v3 search when `YOUTUBE_API_KEY` is set (returns real videos)
-- [ ] Debounce / short-TTL cache so typing doesn't spam requests; always answer < 3 s
-- [ ] Pasted URLs are returned as-is (no lookup)
-- [ ] Unit tests for suggestion parsing
+- [x] `/play` query autocomplete from YouTube suggestions (no API key)
+- [x] Optional YouTube Data API v3 search when `YOUTUBE_API_KEY` is set (real videos with duration; choice value = video URL)
+- [x] Debounce (350 ms per user) + 10 min cache so typing doesn't spam requests; 2 s timeout keeps answers < 3 s
+- [x] Data API failure / quota exhausted → fall back to suggestions for 1 h
+- [x] Pasted URLs are returned as-is (no lookup)
+- [x] API key never logged (HTTP errors are stripped of their URL)
+- [x] Dev mode registers commands in `DEV_GUILD_ID` and clears global ones (avoids stale client cache / duplicates)
+- [x] Unit tests for suggestion parsing, ISO 8601 durations, title unescaping, truncation
+- [x] Manual test: suggestions appear while typing
 
 ## M3 — Queue & navigation ⬜
 

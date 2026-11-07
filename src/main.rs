@@ -4,6 +4,7 @@ mod events;
 mod http;
 mod i18n;
 mod player;
+mod search;
 mod state;
 mod youtube;
 
@@ -56,7 +57,9 @@ async fn main() -> anyhow::Result<()> {
                     // Guild registration is instant; global registration can take up to an hour.
                     Some(guild) => {
                         poise::builtins::register_in_guild(ctx, commands, guild).await?;
-                        info!(%guild, "registered commands in dev guild");
+                        // Drop global copies so the dev guild doesn't show every command twice.
+                        serenity::Command::set_global_commands(ctx, vec![]).await?;
+                        info!(%guild, "registered commands in dev guild, cleared global ones");
                     }
                     None => {
                         poise::builtins::register_globally(ctx, commands).await?;

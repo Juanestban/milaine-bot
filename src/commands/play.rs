@@ -1,4 +1,6 @@
-use poise::serenity_prelude::{ChannelId, GuildId, Mentionable, UserId};
+use poise::serenity_prelude::{
+    AutocompleteChoice, ChannelId, CreateAutocompleteResponse, GuildId, Mentionable, UserId,
+};
 use songbird::events::{Event, TrackEvent};
 use tracing::{info, warn};
 
@@ -23,6 +25,7 @@ pub async fn play(
     #[name_localized("es-419", "cancion")]
     #[description_localized("es-ES", "Nombre de la canción o link de YouTube")]
     #[description_localized("es-419", "Nombre de la canción o link de YouTube")]
+    #[autocomplete = "autocomplete_query"]
     query: String,
 ) -> Result<(), Error> {
     let guild_id = ctx.guild_id().ok_or("/play is guild only")?;
@@ -134,6 +137,19 @@ pub async fn play(
         }
         Err(_) => reply(ctx, Msg::QueueFull { max: MAX_QUEUE }).await,
     }
+}
+
+/// Live YouTube results while the user types the `/play` query.
+async fn autocomplete_query(ctx: Context<'_>, partial: &str) -> CreateAutocompleteResponse {
+    let choices = ctx
+        .data()
+        .search
+        .autocomplete(ctx.author().id, partial)
+        .await
+        .into_iter()
+        .map(|c| AutocompleteChoice::new(c.name, c.value))
+        .collect();
+    CreateAutocompleteResponse::new().set_choices(choices)
 }
 
 /// The voice channel `user` is currently in, from the gateway cache.
