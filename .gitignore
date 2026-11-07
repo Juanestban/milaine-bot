@@ -1,0 +1,24 @@
+# Rust build output
+/target
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+cookies.txt
+*.cookies.txt
+
+# Agent / tooling output (local only)
+graphify-out/
+.claude/settings.local.json
+
+# Logs
+*.log
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

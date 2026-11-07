@@ -1,0 +1,3 @@
+# Files graphify should not index (binary/visual assets add no code context)
+assets/
+LICENSE

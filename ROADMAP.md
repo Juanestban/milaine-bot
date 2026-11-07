@@ -1,0 +1,113 @@
+# Roadmap
+
+Requirements and progress for Milaine Bot. Tick a box only when the item is implemented, tested
+(`cargo clippy` + `cargo test` green) and committed.
+
+Legend: ✅ done · 🚧 in progress · ⬜ todo
+
+---
+
+## M0 — Foundation ✅
+
+- [x] Cargo project with serenity + poise + songbird + yt-dlp stack
+- [x] Config from env / `.env` (`DISCORD_TOKEN`, `DEV_GUILD_ID`, `YOUTUBE_API_KEY`, timeouts, cookies) with tests
+- [x] Shared HTTP client with neutral User-Agent (no personal data in headers)
+- [x] Slash command registration (dev guild = instant, otherwise global)
+- [x] `/ping` health check
+- [x] Locale → language detection (`es-*` → Spanish, else English)
+- [x] Logo (SVG + 512px PNG), README, CLAUDE.md, DECISIONS.md, `.env.example`, MIT license
+
+## M1 — Play from YouTube ⬜
+
+- [ ] Per-guild player state (`GuildPlayer`) stored in `Data`, safe across concurrent guilds
+- [ ] YouTube URL parsing: `youtube.com/watch?v=`, `youtu.be/`, `music.youtube.com`, `/shorts/`; strip `&list=` (unit tests)
+- [ ] Resolve a query or URL to track metadata (title, url, duration, thumbnail) via yt-dlp
+- [ ] `/play <query|url>`:
+  - [ ] Caller must be in a voice channel → otherwise friendly error
+  - [ ] Bot joins the caller's voice channel
+  - [ ] Bot already in another channel of the guild → reject with the channel name
+  - [ ] Nothing playing → start immediately; otherwise enqueue and reply with position
+- [ ] Defer the interaction reply (resolution can exceed 3 s)
+- [ ] Pass `YTDLP_COOKIES` to yt-dlp when set
+- [ ] Manual test: plays audio in a real voice channel
+
+## M2 — Autocomplete ⬜
+
+- [ ] `/play` query autocomplete from YouTube suggestions (no API key)
+- [ ] Optional YouTube Data API v3 search when `YOUTUBE_API_KEY` is set (returns real videos)
+- [ ] Debounce / short-TTL cache so typing doesn't spam requests; always answer < 3 s
+- [ ] Pasted URLs are returned as-is (no lookup)
+- [ ] Unit tests for suggestion parsing
+
+## M3 — Queue & navigation ⬜
+
+- [ ] Queue model: current, upcoming (max 100), history (last 50) — pure logic with unit tests
+- [ ] Auto-advance to next track when one ends (songbird track end event)
+- [ ] `/next` — skip to next track
+- [ ] `/prev` — go back to the previous track (current is pushed back to the front of the queue)
+- [ ] `/replay` — restart the current track from 0:00
+- [ ] `/queue` — paginated list (now playing + upcoming), page buttons or `page` option
+- [ ] Only users in the bot's voice channel can control it
+
+## M4 — Playback control ⬜
+
+- [ ] `/pause` — toggles pause/resume
+- [ ] `/resume` — explicit resume alias
+- [ ] `/stop` — stop playback and clear the queue, stay in channel (starts idle timer)
+- [ ] `/disconnect` — leave the channel and clear all state
+
+## M5 — Idle & auto-disconnect ⬜
+
+- [ ] Empty queue → idle state
+- [ ] Leave after `IDLE_TIMEOUT_SECS` (default 10 min) idle; timer cancelled when a new song is played
+- [ ] Paused does **not** count as idle
+- [ ] Alone in the channel (no humans) → leave after `ALONE_TIMEOUT_SECS` (default 2 min)
+- [ ] Clean state when kicked / moved by a moderator
+- [ ] Unit tests with paused tokio time
+
+## M6 — Bilingual UX & embeds ⬜
+
+- [ ] All user-facing messages available in English and Spanish (catalog in `i18n.rs`, tests that every key has both)
+- [ ] Command names/descriptions/options localized for `es-ES` and `es-419`
+- [ ] "Now playing" embed: title (link), thumbnail, duration, requested by
+- [ ] "Added to queue" embed with position and ETA
+- [ ] Friendly error embeds (not in voice, nothing playing, video unavailable, age-restricted…)
+
+## M7 — Hardening ⬜
+
+- [ ] Graceful shutdown (Ctrl+C leaves all voice channels)
+- [ ] Startup check: `yt-dlp` and `ffmpeg` present on PATH, with a clear error if missing
+- [ ] Structured logs per guild
+- [ ] Manual test checklist (below) passes
+
+## M8 — Production (later) ⬜
+
+- [ ] Dockerfile (multi-stage: build Rust binary; runtime with yt-dlp + ffmpeg)
+- [ ] `docker-compose.yml` with `.env`
+- [ ] systemd unit for bare-metal VPS
+- [ ] Docs: YouTube cookies for datacenter IPs, keeping yt-dlp up to date
+- [ ] CI (GitHub Actions): fmt, clippy, test
+
+## Backlog (v1.1+)
+
+- [ ] Now-playing buttons (⏮ ⏯ ⏭ ⏹)
+- [ ] YouTube playlist links
+- [ ] `/volume`, `/shuffle`, `/loop`, `/remove`, `/nowplaying`
+- [ ] `/language` per-guild override
+
+---
+
+## Manual test checklist
+
+Run against a test server with `DEV_GUILD_ID` set.
+
+- [ ] `/play` while not in voice → error message
+- [ ] `/play <search text>` → joins my channel and plays
+- [ ] `/play <youtube link>` and `youtu.be` link → plays
+- [ ] `/play` twice → second track queued, `/queue` shows it
+- [ ] `/next`, `/prev`, `/replay` behave as described
+- [ ] `/pause` → `/pause` (resume) → `/resume`
+- [ ] `/stop` → silence, still in channel; leaves after idle timeout
+- [ ] `/disconnect` → leaves immediately
+- [ ] Everyone leaves the channel → bot leaves after alone timeout
+- [ ] Discord client in Spanish → replies in Spanish; in English → English
