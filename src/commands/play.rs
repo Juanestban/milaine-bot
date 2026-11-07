@@ -1,14 +1,14 @@
-use poise::serenity_prelude::{
-    AutocompleteChoice, ChannelId, CreateAutocompleteResponse, GuildId, Mentionable, UserId,
-};
 use std::sync::Arc;
 use std::time::Instant;
 
+use poise::serenity_prelude::{
+    AutocompleteChoice, ChannelId, CreateAutocompleteResponse, GuildId, Mentionable,
+};
 use songbird::{Call, Songbird};
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
-use super::{reply, reply_embed, reply_private};
+use super::{reply, reply_embed, reply_private, voice_channel_of};
 use crate::i18n::Msg;
 use crate::player::{Enqueued, GuildPlayer, MAX_QUEUE, Track};
 use crate::state::{Context, Error, lang};
@@ -47,6 +47,7 @@ pub async fn play(
     let manager = songbird::get(ctx.serenity_context())
         .await
         .ok_or("songbird is not registered")?;
+    let playback = &ctx.data().playback;
 
     let bot_channel = match manager.get(guild_id) {
         Some(call) => call.lock().await.current_channel(),
@@ -60,7 +61,7 @@ pub async fn play(
         Some(_) => {}
         // Not connected: drop any stale state left by a previous session.
         None => {
-            ctx.data().playback.players.lock().await.remove(&guild_id);
+            playback.players.lock().await.remove(&guild_id);
         }
     }
 
@@ -70,7 +71,7 @@ pub async fn play(
     // Join the voice channel while yt-dlp resolves, so both waits overlap.
     let started = Instant::now();
     let (resolved, call) = tokio::join!(
-        ctx.data().playback.youtube.resolve(&query),
+        playback.youtube.resolve(&query),
         join_voice(&manager, guild_id, user_channel)
     );
     let call = call?;
@@ -94,41 +95,40 @@ pub async fn play(
         lang: lang(ctx),
     };
 
-    let playback = &ctx.data().playback;
-    let mut players = playback.players.lock().await;
-    let player = players
-        .entry(guild_id)
-        .or_insert_with(|| GuildPlayer::new(user_channel, ctx.channel_id()));
-    player.channel_id = user_channel;
-    player.text_channel = ctx.channel_id();
+    let enqueued = {
+        let mut players = playback.players.lock().await;
+        let player = players
+            .entry(guild_id)
+            .or_insert_with(|| GuildPlayer::new(user_channel, ctx.channel_id()));
+        player.channel_id = user_channel;
+        player.text_channel = ctx.channel_id();
+        player
+            .enqueue(track.clone())
+            .map(|e| (e, player.upcoming.len()))
+    };
 
-    match player.enqueue(track.clone()) {
-        Ok(Enqueued::PlayNow) => {
-            match playback
-                .start(guild_id, &call, &track, stream.as_ref())
+    match enqueued {
+        Ok((Enqueued::PlayNow, queue_len)) => {
+            if playback
+                .play_current(guild_id, &call, stream)
                 .await
+                .is_none()
             {
-                Ok(handle) => player.handle = Some(handle),
-                Err(error) => {
-                    warn!(%error, "could not start stream");
-                    player.current = None;
-                    return reply(ctx, Msg::ResolveFailed).await;
-                }
+                return reply(ctx, Msg::ResolveFailed).await;
             }
-            let embed = ui::track_embed(TrackHeading::NowPlaying, &track, player.upcoming.len());
-            drop(players);
+            let embed = ui::track_embed(TrackHeading::NowPlaying, &track, queue_len, lang(ctx));
             reply_embed(ctx, embed).await
         }
-        Ok(Enqueued::Queued(position)) => {
+        Ok((Enqueued::Queued(position), queue_len)) => {
             info!(%guild_id, title = %track.info.title, position, "queued");
-            let embed = ui::track_embed(TrackHeading::AddedToQueue, &track, player.upcoming.len());
-            drop(players);
+            if position == 1 {
+                // It plays next: resolve it now so the switch is instant.
+                playback.prefetch(guild_id, track.clone());
+            }
+            let embed = ui::track_embed(TrackHeading::AddedToQueue, &track, queue_len, lang(ctx));
             reply_embed(ctx, embed).await
         }
-        Err(_) => {
-            drop(players);
-            reply(ctx, Msg::QueueFull { max: MAX_QUEUE }).await
-        }
+        Err(_) => reply(ctx, Msg::QueueFull { max: MAX_QUEUE }).await,
     }
 }
 
@@ -156,10 +156,4 @@ async fn autocomplete_query(ctx: Context<'_>, partial: &str) -> CreateAutocomple
         .map(|c| AutocompleteChoice::new(c.name, c.value))
         .collect();
     CreateAutocompleteResponse::new().set_choices(choices)
-}
-
-/// The voice channel `user` is currently in, from the gateway cache.
-fn voice_channel_of(ctx: Context<'_>, guild_id: GuildId, user: UserId) -> Option<ChannelId> {
-    let guild = ctx.serenity_context().cache.guild(guild_id)?;
-    guild.voice_states.get(&user)?.channel_id
 }

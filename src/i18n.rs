@@ -23,14 +23,41 @@ impl Lang {
 pub enum Msg<'a> {
     Pong,
     NotInVoice,
-    BusyElsewhere { channel: &'a str },
+    BusyElsewhere {
+        channel: &'a str,
+    },
     UnsupportedLink,
     EmptyQuery,
     ResolveFailed,
-    QueueFull { max: usize },
+    QueueFull {
+        max: usize,
+    },
     NowPlayingHeading,
     AddedToQueueHeading,
-    QueueLength { len: usize },
+    QueueLength {
+        len: usize,
+    },
+    NothingPlaying,
+    NotWithBot {
+        channel: &'a str,
+    },
+    NoPrevious,
+    SkippedQueueEmpty,
+    Paused,
+    Resumed,
+    NotPaused,
+    Stopped,
+    Disconnected,
+    QueueHeading,
+    QueueEmpty,
+    NowPlayingLabel,
+    PausedLabel,
+    QueueFooter {
+        page: usize,
+        pages: usize,
+        count: usize,
+        total: &'a str,
+    },
 }
 
 impl Msg<'_> {
@@ -65,6 +92,58 @@ impl Msg<'_> {
             (Msg::AddedToQueueHeading, Es) => "Agregada a la cola 🎶".into(),
             (Msg::QueueLength { len }, En) => format!("**Queue Length:** {len}"),
             (Msg::QueueLength { len }, Es) => format!("**Canciones en cola:** {len}"),
+            (Msg::NothingPlaying, En) => "Nothing is playing right now.".into(),
+            (Msg::NothingPlaying, Es) => "No hay nada reproduciéndose ahora.".into(),
+            (Msg::NotWithBot { channel }, En) => {
+                format!("You need to be in {channel} with me to control the music.")
+            }
+            (Msg::NotWithBot { channel }, Es) => {
+                format!("Tienes que estar conmigo en {channel} para controlar la música.")
+            }
+            (Msg::NoPrevious, En) => "There is no previous song.".into(),
+            (Msg::NoPrevious, Es) => "No hay una canción anterior.".into(),
+            (Msg::SkippedQueueEmpty, En) => "⏭️ Skipped. The queue is empty now.".into(),
+            (Msg::SkippedQueueEmpty, Es) => "⏭️ Saltada. La cola quedó vacía.".into(),
+            (Msg::Paused, En) => "⏸️ Paused. Use `/pause` or `/resume` to continue.".into(),
+            (Msg::Paused, Es) => "⏸️ En pausa. Usa `/pause` o `/resume` para continuar.".into(),
+            (Msg::Resumed, En) => "▶️ Resumed.".into(),
+            (Msg::Resumed, Es) => "▶️ Reanudada.".into(),
+            (Msg::NotPaused, En) => "The music isn't paused.".into(),
+            (Msg::NotPaused, Es) => "La música no está en pausa.".into(),
+            (Msg::Stopped, En) => "⏹️ Stopped and cleared the queue.".into(),
+            (Msg::Stopped, Es) => "⏹️ Detenida y cola vaciada.".into(),
+            (Msg::Disconnected, En) => "👋 Disconnected. See you!".into(),
+            (Msg::Disconnected, Es) => "👋 Desconectada. ¡Nos vemos!".into(),
+            (Msg::QueueHeading, En) => "🎶 Queue".into(),
+            (Msg::QueueHeading, Es) => "🎶 Cola".into(),
+            (Msg::QueueEmpty, En) => "_No songs in the queue._".into(),
+            (Msg::QueueEmpty, Es) => "_No hay canciones en la cola._".into(),
+            (Msg::NowPlayingLabel, En) => "**Now Playing:**".into(),
+            (Msg::NowPlayingLabel, Es) => "**Reproduciendo:**".into(),
+            (Msg::PausedLabel, En) => "**Paused:**".into(),
+            (Msg::PausedLabel, Es) => "**En pausa:**".into(),
+            (
+                Msg::QueueFooter {
+                    page,
+                    pages,
+                    count,
+                    total,
+                },
+                En,
+            ) => {
+                format!("Page {page}/{pages} · {count} songs · {total} total")
+            }
+            (
+                Msg::QueueFooter {
+                    page,
+                    pages,
+                    count,
+                    total,
+                },
+                Es,
+            ) => {
+                format!("Página {page}/{pages} · {count} canciones · {total} en total")
+            }
         }
     }
 }
@@ -122,6 +201,25 @@ mod tests {
             Msg::NowPlayingHeading,
             Msg::AddedToQueueHeading,
             Msg::QueueLength { len: 1 },
+            Msg::NothingPlaying,
+            Msg::NotWithBot { channel: "#music" },
+            Msg::NoPrevious,
+            Msg::SkippedQueueEmpty,
+            Msg::Paused,
+            Msg::Resumed,
+            Msg::NotPaused,
+            Msg::Stopped,
+            Msg::Disconnected,
+            Msg::QueueHeading,
+            Msg::QueueEmpty,
+            Msg::NowPlayingLabel,
+            Msg::PausedLabel,
+            Msg::QueueFooter {
+                page: 1,
+                pages: 2,
+                count: 12,
+                total: "45:12",
+            },
         ];
         for msg in all {
             let (en, es) = (msg.render(Lang::En), msg.render(Lang::Es));

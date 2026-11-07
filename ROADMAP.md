@@ -46,25 +46,29 @@ Legend: ✅ done · 🚧 in progress · ⬜ todo
 - [x] Unit tests for suggestion parsing, ISO 8601 durations, title unescaping, truncation
 - [x] Manual test: suggestions appear while typing
 
-## M3 — Queue & navigation ⬜
+## M3 — Queue & navigation 🚧
 
-- [ ] Queue model: current, upcoming (max 100), history (last 50) — pure logic with unit tests
+- [x] Queue model: current, upcoming (max 100), history (last 50) — pure logic with unit tests
 - [x] Auto-advance to next track when one ends or fails (songbird End/Error events, stale handles ignored)
 - [x] Queued tracks are re-resolved when their turn comes (stream URLs expire)
+- [x] Prefetch the next track's stream while the current one plays (instant transitions)
 - [x] Announce "Now Playing" in the text channel when auto-advancing
 - [x] After the queue ends, the next `/play` starts immediately (was stuck as "queued")
-- [ ] `/next` — skip to next track
-- [ ] `/prev` — go back to the previous track (current is pushed back to the front of the queue)
-- [ ] `/replay` — restart the current track from 0:00
-- [ ] `/queue` — paginated list (now playing + upcoming), page buttons or `page` option
-- [ ] Only users in the bot's voice channel can control it
+- [x] `/next` — skip to next track
+- [x] `/prev` — go back to the previous track (current is pushed back to the front of the queue)
+- [x] `/replay` — restart the current track from 0:00 (reuses its stream when fresh)
+- [x] `/queue` — paginated list (now playing + upcoming, 10 per page, total duration)
+- [x] Only users in the bot's voice channel can control it
+- [ ] Manual test of every command
 
-## M4 — Playback control ⬜
+## M4 — Playback control 🚧
 
-- [ ] `/pause` — toggles pause/resume
-- [ ] `/resume` — explicit resume alias
-- [ ] `/stop` — stop playback and clear the queue, stay in channel (starts idle timer)
-- [ ] `/disconnect` — leave the channel and clear all state
+- [x] `/pause` — toggles pause/resume
+- [x] `/resume` — explicit resume
+- [x] `/stop` — stop playback and clear the queue, stay in channel (history kept)
+- [x] `/disconnect` — leave the channel and clear all state
+- [ ] Idle timer after `/stop` (see M5)
+- [ ] Manual test of every command
 
 ## M5 — Idle & auto-disconnect ⬜
 
